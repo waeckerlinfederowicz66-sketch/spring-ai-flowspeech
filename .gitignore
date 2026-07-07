@@ -1,0 +1,7 @@
+target/
+*.class
+*.wav
+*.mp3
+*.ogg
+*.flac
+.DS_Store
