@@ -20,6 +20,9 @@ public final class FlowSpeechTextToSpeechOptions implements TextToSpeechOptions 
 	private final @Nullable Double speed;
 
 	private FlowSpeechTextToSpeechOptions(Builder builder) {
+		if (builder.model != null || builder.format != null || builder.speed != null) {
+			throw new IllegalArgumentException("API v1 does not support model, format or speed options");
+		}
 		this.model = builder.model;
 		this.voice = builder.voice;
 		this.format = builder.format;

@@ -5,3 +5,4 @@ target/
 *.ogg
 *.flac
 .DS_Store
+.tools/

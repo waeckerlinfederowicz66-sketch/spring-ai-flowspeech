@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>io.flowspeech</groupId>
 		<artifactId>spring-ai-flowspeech-parent</artifactId>
-		<version>0.1.0-SNAPSHOT</version>
+		<version>0.2.0</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 
@@ -41,6 +41,10 @@
 			<artifactId>jackson-annotations</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>tools.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.jspecify</groupId>
 			<artifactId>jspecify</artifactId>
 		</dependency>
@@ -53,6 +57,7 @@
 		<dependency>
 			<groupId>com.squareup.okhttp3</groupId>
 			<artifactId>mockwebserver</artifactId>
+			<version>4.12.0</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

@@ -1,12 +1,12 @@
 package io.flowspeech.springai;
 
-import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.jspecify.annotations.Nullable;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import org.springframework.ai.audio.tts.Speech;
 import org.springframework.ai.audio.tts.TextToSpeechModel;
@@ -23,11 +23,7 @@ import io.flowspeech.springai.api.FlowSpeechApi;
  */
 public class FlowSpeechTextToSpeechModel implements TextToSpeechModel {
 
-	private final Log logger = LogFactory.getLog(getClass());
-
 	private final FlowSpeechApi flowSpeechApi;
-
-	private final RetryTemplate retryTemplate;
 
 	private final FlowSpeechTextToSpeechOptions options;
 
@@ -40,9 +36,12 @@ public class FlowSpeechTextToSpeechModel implements TextToSpeechModel {
 		Assert.notNull(flowSpeechApi, "flowSpeechApi must not be null");
 		Assert.notNull(options, "options must not be null");
 		Assert.notNull(retryTemplate, "retryTemplate must not be null");
+		if (retryTemplate != RetryUtils.DEFAULT_RETRY_TEMPLATE) {
+			throw new IllegalArgumentException("Configure retries on FlowSpeechApi; whole-generation RetryTemplate is unsupported");
+		}
 		this.flowSpeechApi = flowSpeechApi;
 		this.options = options;
-		this.retryTemplate = retryTemplate;
+		// Retries belong to the API client so a download failure never creates another job.
 	}
 
 	public static Builder builder() {
@@ -51,21 +50,22 @@ public class FlowSpeechTextToSpeechModel implements TextToSpeechModel {
 
 	@Override
 	public TextToSpeechResponse call(TextToSpeechPrompt prompt) {
-		FlowSpeechApi.FlowSpeechRequest request = createRequest(prompt);
-		byte[] audio = RetryUtils.execute(this.retryTemplate, () -> decodeAudio(this.flowSpeechApi.textToSpeech(request)));
+		FlowSpeechApi.Input request = createRequest(prompt);
+		byte[] audio = this.flowSpeechApi.generate(request, UUID.randomUUID());
 		return new TextToSpeechResponse(List.of(new Speech(audio)));
 	}
 
 	@Override
 	public Flux<TextToSpeechResponse> stream(TextToSpeechPrompt prompt) {
-		FlowSpeechApi.FlowSpeechRequest request = createRequest(prompt);
-		return RetryUtils.execute(this.retryTemplate, () -> this.flowSpeechApi.textToSpeechAsync(request)
-			.map(this::decodeAudio)
+		FlowSpeechApi.Input request = createRequest(prompt);
+		UUID requestId = UUID.randomUUID();
+		return Mono.fromCallable(() -> this.flowSpeechApi.generate(request, requestId))
+			.subscribeOn(Schedulers.boundedElastic())
 			.map(audio -> new TextToSpeechResponse(List.of(new Speech(audio))))
-			.flux());
+			.flux();
 	}
 
-	private FlowSpeechApi.FlowSpeechRequest createRequest(TextToSpeechPrompt prompt) {
+	private FlowSpeechApi.Input createRequest(TextToSpeechPrompt prompt) {
 		Assert.notNull(prompt, "prompt must not be null");
 		String text = prompt.getInstructions().getText();
 		Assert.hasText(text, "Prompt must contain text to convert to speech");
@@ -74,34 +74,17 @@ public class FlowSpeechTextToSpeechModel implements TextToSpeechModel {
 		String voice = mergedOptions.getVoice();
 		Assert.hasText(voice, "A FlowSpeech voice must be specified");
 
-		return new FlowSpeechApi.FlowSpeechRequest(text, text,
-				List.of(new FlowSpeechApi.Speaker(voice, null)));
-	}
-
-	private byte[] decodeAudio(FlowSpeechApi.FlowSpeechResponse response) {
-		if (response == null) {
-			throw new IllegalStateException("FlowSpeech returned an empty response");
-		}
-		if (response.code() != 0) {
-			throw new IllegalStateException(response.message() != null ? response.message() : "FlowSpeech TTS failed");
-		}
-		if (response.data() == null || response.data().audioBase64() == null || response.data().audioBase64().isBlank()) {
-			if (this.logger.isWarnEnabled()) {
-				this.logger.warn("FlowSpeech returned no audio data");
-			}
-			return new byte[0];
-		}
-		return Base64.getDecoder().decode(stripDataUriPrefix(response.data().audioBase64()));
-	}
-
-	private static String stripDataUriPrefix(String value) {
-		int commaIndex = value.indexOf(',');
-		return value.startsWith("data:") && commaIndex >= 0 ? value.substring(commaIndex + 1) : value;
+		return FlowSpeechApi.Input.single(text, voice);
 	}
 
 	private FlowSpeechTextToSpeechOptions getOptions(TextToSpeechPrompt prompt) {
 		if (prompt.getOptions() instanceof FlowSpeechTextToSpeechOptions runtimeOptions) {
 			return runtimeOptions.merge(this.options);
+		}
+		if (prompt.getOptions() != null) {
+			var runtime = prompt.getOptions();
+			return FlowSpeechTextToSpeechOptions.builder().model(runtime.getModel()).format(runtime.getFormat())
+				.speed(runtime.getSpeed()).voice(runtime.getVoice()).build().merge(this.options);
 		}
 		return this.options;
 	}
@@ -134,6 +117,7 @@ public class FlowSpeechTextToSpeechModel implements TextToSpeechModel {
 			return this;
 		}
 
+		@Deprecated
 		public Builder retryTemplate(RetryTemplate retryTemplate) {
 			this.retryTemplate = retryTemplate;
 			return this;

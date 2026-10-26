@@ -2,7 +2,9 @@
 
 ## Current Status
 
-This project provides a working external Spring AI provider for [FlowSpeech](https://flowspeech.io/):
+This project is already public on GitHub and provides an external Spring AI integration for [FlowSpeech](https://flowspeech.io/).
+Version 0.2.0 is prepared locally for API v1; no Maven Central publication or
+official Spring AI acceptance is claimed.
 
 - `FlowSpeechApi`
 - `FlowSpeechTextToSpeechOptions`
@@ -15,12 +17,13 @@ This project provides a working external Spring AI provider for [FlowSpeech](htt
 
 ### 1. Awesome Spring AI
 
-Open a PR to `spring-ai-community/awesome-spring-ai` after this project is in a public repository.
+The coordinator should inspect any existing directory PR before making an update.
+Do not create a duplicate submission.
 
 Suggested entry:
 
 ```markdown
-- [Spring AI FlowSpeech](https://github.com/<owner>/spring-ai-flowspeech) - FlowSpeech Text-to-Speech provider and Spring Boot starter for Spring AI.
+- [Spring AI FlowSpeech](https://github.com/waeckerlinfederowicz66-sketch/spring-ai-flowspeech) - FlowSpeech public API v1 text-to-speech adapter and Spring Boot starter for Spring AI.
 ```
 
 ### 2. Official Spring AI
