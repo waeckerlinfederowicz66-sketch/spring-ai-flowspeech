@@ -13,8 +13,8 @@ import org.springframework.core.env.MapPropertySource;
 public class ArtifactSmoke {
     public static void main(String[] args) throws Exception {
         for (Class<?> type : new Class<?>[] { FlowSpeechApi.class, FlowSpeechAutoConfiguration.class }) {
-            if (!type.getProtectionDomain().getCodeSource().getLocation().getPath().endsWith("-0.2.0.jar")) {
-                throw new AssertionError("Expected packaged 0.2.0 JAR: " + type);
+            if (!type.getProtectionDomain().getCodeSource().getLocation().getPath().endsWith("-0.2.1.jar")) {
+                throw new AssertionError("Expected packaged 0.2.1 JAR: " + type);
             }
         }
         var apiServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);

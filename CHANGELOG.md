@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 - 2026-10-27 (release candidate)
 
 - Filter reflected key/URL values from API error codes and traces and terminal job errors; retain generic messages and recovery IDs.
 - Do not retry received permanent HTTP errors or redirects when reading their response body fails.
-- Retry non-JSON HTTP 429 responses using the received cooldown and original submission identity; retain HTTP status and recovery metadata without echoing gateway bodies. Local fix only; existing public artifacts are unchanged.
+- Retry non-JSON HTTP 429 responses using the received cooldown and original submission identity; retain HTTP status and recovery metadata without echoing gateway bodies. Existing public artifacts are unchanged until a separate release.
 
 ## 0.2.0 - 2026-10-26 (prepared, not published)
 

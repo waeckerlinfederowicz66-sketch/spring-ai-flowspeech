@@ -3,7 +3,7 @@
 ## Current Status
 
 This project is already public on GitHub and provides an external Spring AI integration for [FlowSpeech](https://flowspeech.io/).
-Version 0.2.0 is prepared locally for API v1; no Maven Central publication or
+Version 0.2.1 is a prepared local API v1 release candidate; no Maven Central publication or
 official Spring AI acceptance is claimed.
 
 - `FlowSpeechApi`

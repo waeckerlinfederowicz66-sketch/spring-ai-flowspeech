@@ -15,7 +15,7 @@ function walk(directory) {
 }
 walk(repo);
 const artifacts = ['model','autoconfigure','starter'].map(module =>
-  path.join(root, 'spring-ai-flowspeech-' + module, 'target', 'spring-ai-flowspeech-' + module + '-0.2.0.jar'));
+  path.join(root, 'spring-ai-flowspeech-' + module, 'target', 'spring-ai-flowspeech-' + module + '-0.2.1.jar'));
 for (const artifact of artifacts) if (!fs.existsSync(artifact)) throw new Error('Run mvn verify first: ' + artifact);
 const result = spawnSync(java, ['-cp', [...artifacts, ...dependencies].join(path.delimiter),
   path.join(root, 'verification/ArtifactSmoke.java')], { stdio: 'inherit', cwd: root });

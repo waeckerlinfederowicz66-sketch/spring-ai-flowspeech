@@ -1,7 +1,7 @@
 # Spring AI FlowSpeech
 
 [FlowSpeech](https://flowspeech.io/) public API v1 adapter for Spring AI
-`TextToSpeechModel`. Version **0.2.0** is prepared in source; it has **not been
+`TextToSpeechModel`. Version **0.2.1** is a prepared release candidate; it has **not been
 published to Maven Central**. This community integration is not an official
 Spring AI provider.
 
@@ -25,7 +25,7 @@ installing from source, add:
 <dependency>
   <groupId>io.flowspeech</groupId>
   <artifactId>spring-ai-flowspeech-starter</artifactId>
-  <version>0.2.0</version>
+  <version>0.2.1</version>
 </dependency>
 ```
 
@@ -110,6 +110,12 @@ and serialized body. Polling and retries honor a longer numeric or HTTP-date
 `Retry-After`, including headers received before a response body fails, and
 stop rather than exceed the total deadline.
 
+API and terminal-job errors use local messages and filter reflected keys and
+private URLs from diagnostic codes and traces. Interrupted permanent HTTP errors
+do not retry. Non-JSON HTTP 429 responses retain their cooldown without exposing
+gateway bodies. Do not log raw request objects, transport exceptions or result
+URLs; application logging remains a separate trusted boundary.
+
 `FlowSpeechException` exposes `code()`, `traceId()`, `requestId()`,
 `jobId()`, `statusCode()` and `retryable()`. Persist identifiers, not API keys.
 Recover after an ambiguous submission with the same request ID and body.
@@ -159,10 +165,10 @@ It writes `target/flowspeech-demo.wav`. For a no-credit packaged-JAR smoke test:
 MAVEN_REPO="$HOME/.m2/repository" node verification/artifact-smoke.mjs
 ```
 
-The script uses `JAVA_HOME` when set and loads packaged 0.2.0 JARs, starts
+The script uses `JAVA_HOME` when set and loads packaged 0.2.1 JARs, starts
 loopback-only fake API/storage servers and verifies auto-configuration and
-credential-free downloads. See [MIGRATION_REPORT.md](MIGRATION_REPORT.md) for
-the exact migration checks, tool checksums and coordinator release steps.
+credential-free downloads. This is a local synthetic check, not a production
+generation or Maven Central publication check.
 
 [API documentation](https://flowspeech.io/docs/public-api) and
 [OpenAPI](https://flowspeech.io/openapi.json).
