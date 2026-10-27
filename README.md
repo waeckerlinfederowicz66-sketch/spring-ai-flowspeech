@@ -1,9 +1,11 @@
 # Spring AI FlowSpeech
 
 [FlowSpeech](https://flowspeech.io/) public API v1 adapter for Spring AI
-`TextToSpeechModel`. Version **0.2.1** is a prepared release candidate; it has **not been
-published to Maven Central**. This community integration is not an official
-Spring AI provider.
+`TextToSpeechModel`. Version **0.2.1** includes the safety fixes described below
+and targets a new GitHub release; this document does not claim that release
+has been published. Version **0.2.0** was released on GitHub. Neither **0.2.0**
+nor **0.2.1** has been published to Maven Central. This community integration
+is not an official Spring AI provider.
 
 ## Requirements and local installation
 

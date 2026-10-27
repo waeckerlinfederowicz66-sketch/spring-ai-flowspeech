@@ -1,12 +1,17 @@
 # Changelog
 
-## 0.2.1 - 2026-10-27 (release candidate)
+## 0.2.1 - 2026-10-27
+
+- Target a new GitHub release; publication is managed separately. Neither 0.2.0
+  nor 0.2.1 has been published to Maven Central.
 
 - Filter reflected key/URL values from API error codes and traces and terminal job errors; retain generic messages and recovery IDs.
 - Do not retry received permanent HTTP errors or redirects when reading their response body fails.
-- Retry non-JSON HTTP 429 responses using the received cooldown and original submission identity; retain HTTP status and recovery metadata without echoing gateway bodies. Existing public artifacts are unchanged until a separate release.
+- Retry non-JSON HTTP 429 responses using the received cooldown and original submission identity; retain HTTP status and recovery metadata without echoing gateway bodies. Previously published 0.2.0 GitHub artifacts remain unchanged.
 
-## 0.2.0 - 2026-10-26 (prepared, not published)
+## 0.2.0 - 2026-10-26
+
+- Released on GitHub; not published to Maven Central.
 
 - Migrate synchronous TTS to public API v1 create/poll/download jobs.
 - Add quota, voices, explicit multi-speaker input, recovery and cancellation.
