@@ -215,7 +215,7 @@ public final class FlowSpeechApi {
 
     private void success(Job job, Context ctx) {
         if (!"success".equals(job.status())) {
-            throw ctx.error(job.error() == null || blank(job.error().code()) ? job.status() : job.error().code(),
+            throw ctx.error(job.error() == null ? job.status() : safeErrorToken(job.error().code(), job.status()),
                     "Job ended with status " + job.status());
         }
         if (Boolean.TRUE.equals(job.resultDeleted())) {
@@ -254,19 +254,26 @@ public final class FlowSpeechApi {
             if (response.statusCode() >= 300 && response.statusCode() < 400) {
                 throw ctx.error("unexpected_redirect", "API redirects are not permitted");
             }
-            ErrorResponse envelope = decode(response.body(), ErrorResponse.class, ctx);
-            ApiError error = envelope.error();
-            if (error == null || blank(error.code()) || error.retryable() == null || blank(envelope.traceId())) {
-                throw ctx.error("invalid_response", "Malformed API error response");
+            ErrorResponse envelope = null;
+            try {
+                envelope = JSON.readValue(response.body(), ErrorResponse.class);
             }
+            catch (tools.jackson.core.JacksonException ignored) { /* Gateways may return HTML or text errors. */ }
+            ApiError error = envelope == null ? null : envelope.error();
+            boolean validError = error != null && !blank(error.code()) && error.retryable() != null
+                    && !blank(envelope.traceId());
             boolean retry = response.statusCode() == 429
-                    || (response.statusCode() >= 500 && Boolean.TRUE.equals(error.retryable()));
+                    || (response.statusCode() >= 500 && validError && Boolean.TRUE.equals(error.retryable()));
             if (retry && attempt < this.maxRetries) {
                 ctx.sleep(delay(response));
                 continue;
             }
-            throw new FlowSpeechException(error.code(), "FlowSpeech API error (HTTP " + response.statusCode() + ")",
-                    ctx.requestId, ctx.jobId, envelope.traceId(), retry, response.statusCode());
+            String code = error == null ? "http_error" : safeErrorToken(error.code(), "http_error");
+            String traceId = envelope != null && !blank(envelope.traceId()) ? envelope.traceId()
+                    : response.headers().firstValue("X-Request-Id").orElse(null);
+            throw new FlowSpeechException(code, "FlowSpeech API error (HTTP " + response.statusCode() + ")",
+                    ctx.requestId, ctx.jobId, safeErrorToken(traceId, null), retry, response.statusCode(),
+                    response.headers().firstValue("Retry-After").orElse(""));
         }
     }
 
@@ -304,8 +311,11 @@ public final class FlowSpeechApi {
             if (cause instanceof BodyLimitException) throw ctx.error("response_too_large", "Response exceeds configured byte limit");
             if (cause instanceof IOException) {
                 HttpResponse.ResponseInfo info = received.get();
+                int status = info == null ? 0 : info.statusCode();
+                boolean retry = authenticated && (info == null || (status >= 200 && status < 300)
+                        || status == 429 || (status >= 500 && status < 600));
                 throw new FlowSpeechException("transport_error", "HTTP transport failed; recover with requestId",
-                        ctx.requestId, ctx.jobId, null, authenticated, info == null ? 0 : info.statusCode(),
+                        ctx.requestId, ctx.jobId, null, retry, status,
                         info == null ? "" : info.headers().firstValue("Retry-After").orElse(""));
             }
             throw ctx.error("transport_error", "HTTP transport failed");
@@ -342,6 +352,11 @@ public final class FlowSpeechApi {
         if ("success".equals(job.status()) && result == null && !Boolean.TRUE.equals(job.resultDeleted())) {
             throw ctx.error("invalid_result", "Successful job has no result");
         }
+    }
+
+    private @Nullable String safeErrorToken(@Nullable String value, @Nullable String fallback) {
+        return value != null && value.matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+                && !value.contains(this.apiKey) ? value : fallback;
     }
 
     private <T> T decode(byte[] bytes, Class<T> type, Context ctx) {

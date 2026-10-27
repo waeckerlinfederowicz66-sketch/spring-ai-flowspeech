@@ -109,6 +109,81 @@ class FlowSpeechApiTests {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"test-only-placeholder", "prefix-test-only-placeholder-suffix", "https://audio.example.test/private?signature=CANARY"})
+    void reflectedErrorMetadataIsSafeToLog(String unsafe) throws Exception {
+        try (var server = new MockWebServer()) {
+            server.enqueue(json("{\"error\":{\"code\":\"%s\",\"message\":\"%s\",\"retryable\":false},\"traceId\":\"%s\"}".formatted(unsafe, unsafe, unsafe)).setResponseCode(401));
+            var api = builder(server).build();
+            assertThatThrownBy(() -> api.createJob(INPUT, REQUEST))
+                    .isInstanceOfSatisfying(FlowSpeechApi.FlowSpeechException.class, error -> {
+                        assertThat(error.toString()).doesNotContain(unsafe);
+                        assertThat(error.code()).isEqualTo("http_error");
+                        assertThat(error.traceId()).isNull();
+                        assertThat(error.requestId()).isEqualTo(REQUEST.toString());
+                        assertThat(error.getCause()).isNull();
+                    });
+            server.enqueue(json(job("failed", ",\"error\":{\"code\":\"" + unsafe + "\"}")));
+            assertThatThrownBy(() -> api.generate(INPUT, REQUEST))
+                    .isInstanceOfSatisfying(FlowSpeechApi.FlowSpeechException.class, error -> {
+                        assertThat(error.toString()).doesNotContain(unsafe);
+                        assertThat(error.code()).isEqualTo("failed");
+                        assertThat(error.requestId()).isEqualTo(REQUEST.toString());
+                        assertThat(error.jobId()).isEqualTo(ID);
+                    });
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"<html>rate limited</html>", "Rate limited", "{", "null", "[]"})
+    void nonJson429RetainsCooldownAndSubmissionIdentity(String body) throws Exception {
+        try (var server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(429).setBody(body)
+                    .setHeader("Retry-After", "Mon, 26 Oct 2026 00:00:30 GMT"));
+            server.enqueue(json(job("queued", "")).setResponseCode(202));
+            FakeTime time = new FakeTime();
+            builder(server).timeSource(time).maxRetries(1).build().createJob(INPUT, REQUEST);
+            assertThat(time.sleeps).containsExactly(Duration.ofSeconds(30));
+            assertThat(server.getRequestCount()).isEqualTo(2);
+            var first = server.takeRequest();
+            var retry = server.takeRequest();
+            assertThat(retry.getBody().readUtf8()).isEqualTo(first.getBody().readUtf8());
+            assertThat(retry.getHeader("Idempotency-Key")).isEqualTo(REQUEST.toString());
+            assertThat(first.getHeader("Idempotency-Key")).isEqualTo(REQUEST.toString());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {403, 429, 503})
+    void nonJsonFailureRetainsStatusAndRecoveryWithoutEchoingBody(int status) throws Exception {
+        try (var server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(status).setBody("<html>AUDIT_PRIVATE_CANARY</html>")
+                    .setHeader("Retry-After", "30").setHeader("X-Request-Id", "fixture-trace"));
+            assertThatThrownBy(() -> builder(server).maxRetries(0).build().createJob(INPUT, REQUEST))
+                    .isInstanceOfSatisfying(FlowSpeechApi.FlowSpeechException.class, error -> {
+                        assertThat(error.statusCode()).isEqualTo(status);
+                        assertThat(error.requestId()).isEqualTo(REQUEST.toString());
+                        assertThat(error.traceId()).isEqualTo("fixture-trace");
+                        assertThat(error.retryable()).isEqualTo(status == 429);
+                        assertThat(error).hasNoCause().hasMessageNotContaining("AUDIT_PRIVATE_CANARY");
+                    });
+            assertThat(server.getRequestCount()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void malformed503DoesNotEnableNewRetries() throws Exception {
+        try (var server = new MockWebServer()) {
+            server.enqueue(json("{\"error\":{\"retryable\":true}}").setResponseCode(503));
+            assertThatThrownBy(() -> builder(server).maxRetries(1).build().createJob(INPUT, REQUEST))
+                    .isInstanceOfSatisfying(FlowSpeechApi.FlowSpeechException.class, error -> {
+                        assertThat(error.statusCode()).isEqualTo(503);
+                        assertThat(error.retryable()).isFalse();
+                    });
+            assertThat(server.getRequestCount()).isEqualTo(1);
+        }
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"60", "Mon, 26 Oct 2026 00:01:00 GMT"})
     void bodyReadFailureRetainsHeaderCooldownAndIdentity(String retryAfter) throws Exception {
         try (var server = new MockWebServer()) {
@@ -122,6 +197,24 @@ class FlowSpeechApiTests {
             var retry = server.takeRequest();
             assertThat(retry.getBody().readUtf8()).isEqualTo(first.getBody().readUtf8());
             assertThat(retry.getHeader("Idempotency-Key")).isEqualTo(REQUEST.toString());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {401, 403})
+    void interruptedAuthResponseDoesNotRetry(int status) throws Exception {
+        try (var server = new MockWebServer()) {
+            server.enqueue(json("x".repeat(16384)).setResponseCode(status).setHeader("Retry-After", "30")
+                    .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY));
+            FakeTime time = new FakeTime();
+            assertThatThrownBy(() -> builder(server).timeSource(time).build().createJob(INPUT, REQUEST))
+                    .isInstanceOfSatisfying(FlowSpeechApi.FlowSpeechException.class, error -> {
+                        assertThat(error.statusCode()).isEqualTo(status);
+                        assertThat(error.retryable()).isFalse();
+                        assertThat(error.requestId()).isEqualTo(REQUEST.toString());
+                    });
+            assertThat(server.getRequestCount()).isEqualTo(1);
+            assertThat(time.sleeps).isEmpty();
         }
     }
 

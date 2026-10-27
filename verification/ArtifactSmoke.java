@@ -21,6 +21,7 @@ public class ArtifactSmoke {
         var storage = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         var creates = new AtomicInteger();
         var downloads = new AtomicInteger();
+        var quotaReads = new AtomicInteger();
         var submittedIds = new CopyOnWriteArrayList<String>();
         var submittedBodies = new CopyOnWriteArrayList<byte[]>();
         var requestId = UUID.fromString("00000000-0000-4000-8000-000000000002");
@@ -62,6 +63,12 @@ public class ArtifactSmoke {
             exchange.getResponseBody().write(response); exchange.close();
         });
         apiServer.createContext("/api/v1/quota", exchange -> {
+            if (quotaReads.incrementAndGet() == 1) {
+                byte[] limited = "<html>Rate limited</html>".getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Retry-After", "5");
+                exchange.sendResponseHeaders(429, limited.length);
+                exchange.getResponseBody().write(limited); exchange.close(); return;
+            }
             byte[] response = """
                 {"quota":{"available":10,"reserved":0,"remaining":10},
                 "subscription":{"subscriptionNo":"test-subscription","productId":"basic-monthly",
@@ -69,6 +76,11 @@ public class ArtifactSmoke {
                 """.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response); exchange.close();
+        });
+        apiServer.createContext("/api/v1/voices", exchange -> {
+            byte[] response = "{\"error\":{\"code\":\"test-only-placeholder\",\"message\":\"https://audio.example.test/private?signature=CANARY\",\"retryable\":false},\"traceId\":\"test-only-placeholder\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(401, response.length);
             exchange.getResponseBody().write(response); exchange.close();
         });
         apiServer.start(); storage.start();
@@ -85,6 +97,16 @@ public class ArtifactSmoke {
             }
             if (!api.quota().subscription().get("productId").asString().equals("basic-monthly")) {
                 throw new AssertionError("Packaged quota adapter discarded subscription");
+            }
+            if (quotaReads.get() != 2) throw new AssertionError("Packaged adapter did not retry HTML 429");
+            try {
+                api.voices();
+                throw new AssertionError("Packaged adapter accepted rejected request");
+            } catch (FlowSpeechApi.FlowSpeechException error) {
+                if (!error.code().equals("http_error") || error.traceId() != null
+                        || error.toString().contains("test-only-placeholder") || error.toString().contains("CANARY")) {
+                    throw new AssertionError("Packaged error reflection was not sanitized");
+                }
             }
             var existing = new FlowSpeechApi.Job("00000000-0000-4000-8000-000000000001",
                     requestId.toString(), "success", new FlowSpeechApi.Result(
@@ -112,7 +134,7 @@ public class ArtifactSmoke {
             String imports = new String(FlowSpeechAutoConfiguration.class.getClassLoader().getResourceAsStream(
                     "META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports").readAllBytes(), StandardCharsets.UTF_8);
             if (!imports.contains(FlowSpeechAutoConfiguration.class.getName())) throw new AssertionError("Missing auto-configuration import");
-            System.out.println("PASS: packaged 0.2.0 JARs, auto-configuration, v1 request, subscription, credential-free WAV, corrupt PCM rejection and immutable async replay");
+            System.out.println("PASS: local packaged JARs, HTML 429 retry, auto-configuration, v1 request, subscription, credential-free WAV, corrupt PCM rejection and immutable async replay");
         } finally { apiServer.stop(0); storage.stop(0); }
     }
 }
